@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strike Lab - bowling physics simulator</title>
+<style>
+  :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#e8eaf0; --muted:#9aa3b5; --accent:#ffb020; --good:#3ddc84; --bad:#ff5c5c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:18px; }
+  header span { color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns: 1fr; gap:12px; padding:12px; max-width:1200px; margin:0 auto; }
+  @media (min-width: 900px) { main { grid-template-columns: 420px 1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  canvas { width:100%; height:auto; display:block; border-radius:8px; background:#0a0c10; touch-action:none; }
+  .row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14px; }
+  .row label { flex:0 0 132px; color:var(--muted); }
+  .row input[type=range] { flex:1; accent-color:var(--accent); }
+  .row output { flex:0 0 74px; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  button { background:#242936; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 14px; font-size:14px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#111; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  .stats { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-top:10px; }
+  .stat { background:#11141a; border:1px solid var(--line); border-radius:8px; padding:8px; }
+  .stat b { display:block; font-size:20px; font-variant-numeric:tabular-nums; }
+  .stat small { color:var(--muted); font-size:11px; }
+  .good { color:var(--good); } .bad { color:var(--bad); } .warn { color:var(--accent); }
+  #coach { font-size:14px; line-height:1.45; }
+  #coach li { margin:4px 0; }
+  .pins { display:inline-grid; grid-template-columns: repeat(7, 14px); gap:2px; vertical-align:middle; margin-left:6px; }
+  .pins i { width:12px; height:12px; border-radius:50%; background:#eee; display:block; }
+  .pins i.down { background:#333; }
+  select { background:#242936; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .foot { color:var(--muted); font-size:12px; padding:0 16px 16px; max-width:1200px; margin:0 auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Strike Lab</h1>
+  <span>real skid / hook / roll friction physics, 15 lb ball, USBC lane and pin geometry</span>
+</header>
+<main>
+  <section class="panel">
+    <div class="row"><label>Hand</label>
+      <select id="hand"><option value="R">Right</option><option value="L">Left</option></select>
+      <label style="flex:0 0 auto">Preset</label>
+      <select id="preset">
+        <option value="">--</option>
+        <option value="straight">Straight ball (house ball)</option>
+        <option value="tweener">Medium hook (tweener)</option>
+        <option value="cranker">Big hook (cranker)</option>
+        <option value="stroker">Stroker (smooth)</option>
+      </select>
+    </div>
+    <div class="row"><label>Ball speed</label><input type="range" id="speedMph" min="10" max="22" step="0.25"><output></output></div>
+    <div class="row"><label>Rev rate</label><input type="range" id="revRpm" min="0" max="600" step="10"><output></output></div>
+    <div class="row"><label>Axis rotation</label><input type="range" id="axisRotationDeg" min="0" max="90" step="5"><output></output></div>
+    <div class="row"><label>Axis tilt</label><input type="range" id="axisTiltDeg" min="0" max="45" step="5"><output></output></div>
+    <div class="row"><label>Stand board (foul line)</label><input type="range" id="standBoard" min="1" max="39" step="0.5"><output></output></div>
+    <div class="row"><label>Target board (arrows)</label><input type="range" id="targetBoard" min="1" max="39" step="0.25"><output></output></div>
+    <div class="row"><label>Oil pattern length</label><input type="range" id="oilLengthFt" min="30" max="48" step="1"><output></output></div>
+    <div class="btns">
+      <button class="primary" id="throw">Throw</button>
+      <button id="find">Find my line</button>
+      <button id="rate">Strike % (100 shots)</button>
+      <button id="reset">Reset</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="sEntry">--</b><small>entry board (pocket = <span id="pocketBoard">17.5</span>)</small></div>
+      <div class="stat"><b id="sAngle">--</b><small>entry angle (ideal 4-6 deg)</small></div>
+      <div class="stat"><b id="sBreak">--</b><small>breakpoint (ft / board)</small></div>
+      <div class="stat"><b id="sPins">--</b><small>pins down</small></div>
+      <div class="stat"><b id="sSpeed">--</b><small>speed at pins</small></div>
+      <div class="stat"><b id="sRate">--</b><small>strike % with human error</small></div>
+    </div>
+    <div id="result" style="margin-top:10px;font-size:15px"></div>
+  </section>
+  <section class="panel">
+    <canvas id="lane" width="900" height="1100"></canvas>
+  </section>
+  <section class="panel" style="grid-column:1 / -1">
+    <h3 style="margin:0 0 8px">Coach</h3>
+    <div id="coach">Throw a ball or press <b>Find my line</b>.</div>
+    <details style="margin-top:10px"><summary>How the physics works</summary>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5">
+        The ball is a rigid sphere with linear velocity and a 3D spin vector. At the contact patch the lane applies Coulomb friction
+        opposite to the slip velocity (v + w x r). On oil the friction coefficient is ~0.04, so the ball skids and barely changes direction.
+        Past the end of the pattern the friction jumps to ~0.22: the side-roll component of the spin is now dragged by the lane, which pushes
+        the ball sideways (the hook) while it also converts spin into forward roll. Once the slip velocity reaches zero the ball rolls,
+        the hook stops, and it travels straight into the pins (this is why the breakpoint matters). Pins are 3.5 lb bodies that topple when
+        struck faster than a threshold, then slide and knock into neighbours and kickbacks. The strike % button adds realistic human error
+        (about half a board at the arrows, a quarter mph, 15 rpm) to show how forgiving your line really is.
+      </p>
+    </details>
+  </section>
+</main>
+<p class="foot">Lane drawn top-down with the width stretched 5x so you can see the boards. Board numbers count from the right for a right-hander (pocket 17.5) and from the left for a left-hander (pocket 22.5).</p>
+<script src="sim.js"></script>
+<script>
+(function () {
+  const S = BowlingSim;
+  const ids = ["speedMph", "revRpm", "axisRotationDeg", "axisTiltDeg", "standBoard", "targetBoard", "oilLengthFt"];
+  const units = { speedMph: " mph", revRpm: " rpm", axisRotationDeg: " deg", axisTiltDeg: " deg", standBoard: "", targetBoard: "", oilLengthFt: " ft" };
+  const presets = {
+    straight: { speedMph: 15, revRpm: 60, axisRotationDeg: 0, axisTiltDeg: 10, standBoard: 17.5, targetBoard: 17.5 },
+    stroker: { speedMph: 16, revRpm: 280, axisRotationDeg: 30, axisTiltDeg: 15, standBoard: 18, targetBoard: 12 },
+    tweener: { speedMph: 17, revRpm: 350, axisRotationDeg: 45, axisTiltDeg: 15, standBoard: 20, targetBoard: 11 },
+    cranker: { speedMph: 18, revRpm: 480, axisRotationDeg: 60, axisTiltDeg: 20, standBoard: 25, targetBoard: 10 },
+  };
+  const el = (id) => document.getElementById(id);
+  const canvas = el("lane"), ctx = canvas.getContext("2d");
+  let last = null, anim = null;
+
+  function params() {
+    const p = { hand: el("hand").value };
+    for (const k of ids) p[k] = parseFloat(el(k).value);
+    return Object.assign({}, S.DEFAULTS, p);
+  }
+  function setParams(p) {
+    for (const k of ids) if (p[k] != null) { el(k).value = p[k]; }
+    if (p.hand) el("hand").value = p.hand;
+    syncOutputs();
+  }
+  function syncOutputs() {
+    for (const k of ids) { const r = el(k); r.nextElementSibling.textContent = r.value + units[k]; }
+    el("pocketBoard").textContent = el("hand").value === "L" ? "22.5" : "17.5";
+  }
+
+  // ---- drawing -------------------------------------------------------------
+  const XS = 5; // width exaggeration
+  const PAD = 30;
+  function geom() {
+    const W = canvas.width, H = canvas.height;
+    const totalLen = S.LANE.pitY + 0.3;
+    const sy = (H - 2 * PAD) / totalLen;
+    const sx = sy * XS;
+    const cx = W / 2;
+    return { W, H, sy, sx, cx, toX: (x) => cx + x * sx, toY: (y) => H - PAD - y * sy };
+  }
+  function drawLane(p, res) {
+    const g = geom();
+    ctx.clearRect(0, 0, g.W, g.H);
+    const halfW = S.LANE.width / 2, gut = S.LANE.gutterWidth;
+    // gutters
+    ctx.fillStyle = "#1c1f27";
+    ctx.fillRect(g.toX(-halfW - gut), g.toY(S.LANE.pitY), (2 * (halfW + gut)) * g.sx, S.LANE.pitY * g.sy);
+    // lane wood
+    ctx.fillStyle = "#c9a26b";
+    const deckEnd = S.LANE.length + 3 * 10.39 * 0.0254 + 0.35;
+    ctx.fillRect(g.toX(-halfW), g.toY(deckEnd), S.LANE.width * g.sx, deckEnd * g.sy);
+    // oil
+    const oilEnd = p.oilLengthFt * S.FT;
+    ctx.fillStyle = "rgba(90,150,255,0.22)";
+    ctx.fillRect(g.toX(-halfW), g.toY(oilEnd), S.LANE.width * g.sx, oilEnd * g.sy);
+    // boards
+    ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.lineWidth = 1;
+    for (let b = 1; b < 39; b++) { const x = g.toX(-halfW + b * S.LANE.boardWidth); ctx.beginPath(); ctx.moveTo(x, g.toY(0)); ctx.lineTo(x, g.toY(S.LANE.length + 1.1)); ctx.stroke(); }
+    // arrows at 15 ft on boards 5,10,15,20,25,30,35
+    ctx.fillStyle = "#3a2a14";
+    for (const b of [5, 10, 15, 20, 25, 30, 35]) {
+      const x = g.toX(S.boardToX(b)), y = g.toY(S.LANE.arrowsY);
+      ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(x - 6, y + 4); ctx.lineTo(x + 6, y + 4); ctx.closePath(); ctx.fill();
+    }
+    // dots at 7 ft
+    for (const b of [5, 10, 15, 20, 25, 30, 35]) { ctx.beginPath(); ctx.arc(g.toX(S.boardToX(b)), g.toY(7 * S.FT), 3, 0, 7); ctx.fill(); }
+    // foul line & labels
+    ctx.strokeStyle = "#222"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(g.toX(-halfW - gut), g.toY(0)); ctx.lineTo(g.toX(halfW + gut), g.toY(0)); ctx.stroke();
+    ctx.fillStyle = "#9aa3b5"; ctx.font = "12px system-ui"; ctx.textAlign = "center";
+    const hand = p.hand === "L" ? -1 : 1;
+    for (const b of [5, 10, 15, 20, 25, 30, 35]) ctx.fillText(String(b), g.toX(hand * S.boardToX(b)), g.H - 8);
+    ctx.textAlign = "left";
+    for (const ft of [15, 30, 45, 60]) { ctx.fillText(ft + " ft", g.toX(halfW + gut) + 4, g.toY(ft * S.FT) + 4); }
+    ctx.fillText("oil ends " + p.oilLengthFt + " ft", g.toX(-halfW - gut) - 2 - 90, g.toY(oilEnd) + 4);
+    // pocket marker
+    const pocketX = S.boardToX(20 - hand * 2.5);
+    ctx.strokeStyle = "rgba(61,220,132,0.8)"; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(g.toX(pocketX), g.toY(S.LANE.length - 3)); ctx.lineTo(g.toX(pocketX), g.toY(S.LANE.length - 0.2)); ctx.stroke(); ctx.setLineDash([]);
+    // pins
+    const pins = res ? res.pins : S.pinLayout().map((q) => Object.assign({ down: false, gone: false }, q));
+    for (const q of pins) {
+      if (q.gone) continue;
+      ctx.beginPath(); ctx.arc(g.toX(q.x), g.toY(q.y), S.PIN.radius * g.sx, 0, 7);
+      ctx.fillStyle = q.down ? "#555" : "#f4f4f4"; ctx.fill(); ctx.strokeStyle = q.down ? "#333" : "#c33"; ctx.lineWidth = 2; ctx.stroke();
+      if (!q.down) { ctx.fillStyle = "#333"; ctx.font = "11px system-ui"; ctx.textAlign = "center"; ctx.fillText(q.n, g.toX(q.x), g.toY(q.y) + 4); }
+    }
+  }
+  function drawPath(res, upto) {
+    const g = geom();
+    const path = res.path;
+    const colors = { skid: "#6fa8ff", hook: "#ffb020", roll: "#3ddc84", gutter: "#ff5c5c" };
+    ctx.lineWidth = 3; ctx.lineCap = "round";
+    for (let i = 1; i < Math.min(upto, path.length); i++) {
+      ctx.strokeStyle = colors[path[i].phase] || "#fff";
+      ctx.beginPath(); ctx.moveTo(g.toX(path[i - 1].x), g.toY(path[i - 1].y)); ctx.lineTo(g.toX(path[i].x), g.toY(path[i].y)); ctx.stroke();
+    }
+    const k = Math.min(upto, path.length) - 1;
+    if (k >= 0) {
+      ctx.beginPath(); ctx.arc(g.toX(path[k].x), g.toY(path[k].y), S.BALL.radius * g.sx, 0, 7);
+      ctx.fillStyle = "#222"; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+    }
+    // legend
+    ctx.font = "12px system-ui"; ctx.textAlign = "left";
+    let y = 20; for (const [k2, c] of Object.entries(colors)) { ctx.fillStyle = c; ctx.fillRect(10, y - 9, 12, 12); ctx.fillStyle = "#e8eaf0"; ctx.fillText(k2, 28, y); y += 16; }
+  }
+
+  // ---- actions -----------------------------------------------------------
+  function fmt(v, d) { return v == null || isNaN(v) ? "--" : v.toFixed(d); }
+  function pinsHtml(standing) {
+    const order = [7, 8, 9, 10, 4, 5, 6, 2, 3, 1];
+    const cells = { 7: 0, 8: 2, 9: 4, 10: 6, 4: 8, 5: 10, 6: 12, 2: 16, 3: 18, 1: 24 };
+    const grid = new Array(28).fill("<span></span>");
+    for (const n of order) grid[cells[n]] = `<i class="${standing.includes(n) ? "" : "down"}" title="${n}"></i>`;
+    return `<span class="pins">${grid.join("")}</span>`;
+  }
+  function showStats(res) {
+    const s = res.stats;
+    const hand = res.params.hand === "L" ? -1 : 1;
+    const pocket = 20 - hand * 2.5;
+    el("sEntry").textContent = fmt(s.entryBoard, 1);
+    el("sEntry").className = s.entryBoard != null && Math.abs(s.entryBoard - pocket) < 1 ? "good" : "warn";
+    el("sAngle").textContent = fmt(s.entryAngleDeg, 1) + " deg";
+    el("sAngle").className = s.entryAngleDeg >= 4 && s.entryAngleDeg <= 7 ? "good" : "warn";
+    el("sBreak").textContent = fmt(s.breakpointFt, 0) + " ft / " + fmt(s.breakpointBoard, 0);
+    el("sPins").textContent = res.pinsDown;
+    el("sPins").className = res.strike ? "good" : "";
+    el("sSpeed").textContent = fmt(s.speedAtPinsMph, 1) + " mph";
+    const label = s.gutter ? '<span class="bad">GUTTER</span>' : res.strike ? '<span class="good">STRIKE!</span>' : `Left: <b>${res.standing.join("-")}</b>`;
+    el("result").innerHTML = label + pinsHtml(res.standing);
+  }
+  function animate(res) {
+    if (anim) cancelAnimationFrame(anim);
+    let i = 2; const start = performance.now();
+    const step = () => {
+      i = 2 + Math.floor((performance.now() - start) / 1000 * 90 * 1.6);
+      drawLane(res.params, i >= res.path.length ? res : null);
+      drawPath(res, i);
+      if (i < res.path.length) anim = requestAnimationFrame(step); else showStats(res);
+    };
+    step();
+  }
+  function throwBall() {
+    const p = params();
+    last = S.simulate(p);
+    el("sRate").textContent = "--";
+    animate(last);
+    coach(last, null);
+  }
+  function coach(res, line) {
+    const s = res.stats, p = res.params;
+    const hand = p.hand === "L" ? -1 : 1;
+    const pocket = 20 - hand * 2.5;
+    const tips = [];
+    if (s.gutter) tips.push("Gutter. The ball never recovered: aim further inside or slow down so it has time to hook.");
+    if (s.entryBoard != null && !s.gutter) {
+      const off = (s.entryBoard - pocket) * hand;
+      if (Math.abs(off) < 0.75) tips.push(`<b>Pocket hit</b> at board ${s.entryBoard.toFixed(1)}.`);
+      else if (off > 0) tips.push(`Ball went <b>high</b> (${off.toFixed(1)} boards past the pocket toward the headpin/Brooklyn side). Move your feet <b>${hand > 0 ? "left" : "right"}</b> about ${Math.max(1, Math.round(off / 2))} board(s) and keep the same target, or speed up a bit.`);
+      else tips.push(`Ball came in <b>light</b> (${(-off).toFixed(1)} boards short of the pocket). Move your feet <b>${hand > 0 ? "right" : "left"}</b> about ${Math.max(1, Math.round(-off / 2))} board(s) and keep the same target, or slow down / add revs.`);
+    }
+    if (s.entryAngleDeg != null && !s.gutter) {
+      if (s.entryAngleDeg < 3) tips.push(`Entry angle ${s.entryAngleDeg.toFixed(1)} deg is too straight: the ball deflects off the headpin and leaves 10-pins / 5-pins. Add revs, more axis rotation, or swing the ball wider (target a lower board) so it comes into the pocket at 4-6 deg.`);
+      else if (s.entryAngleDeg > 7) tips.push(`Entry angle ${s.entryAngleDeg.toFixed(1)} deg is very steep: it gets punishing splits when you miss. Reduce axis rotation or play straighter.`);
+      else tips.push(`Entry angle ${s.entryAngleDeg.toFixed(1)} deg is in the ideal 4-6 deg window: the ball drives through 1-3-5-9 and the pins take out the rest.`);
+    }
+    if (s.breakpointFt != null && s.breakpointFt < 35 && p.revRpm > 150) tips.push("The ball hooked early (breakpoint before 35 ft) and burned energy in the front: it rolls out before the pins. Add speed or move your target inside.");
+    if (res.strike) tips.push("That is the strike ball. Press <b>Strike %</b> to see how forgiving this line is to normal human error, and Find my line to compare with the optimum.");
+    if (line) {
+      tips.push(`<b>Your line:</b> stand with the ball on board <b>${p.standBoard}</b> at the foul line and roll it over board <b>${line.targetBoard}</b> at the arrows` +
+        ` (${arrowName(line.targetBoard)}). Expected entry board ${line.entryBoard.toFixed(1)} at ${line.entryAngleDeg.toFixed(1)} deg, strike rate ~${Math.round(line.rate * 100)}% with normal error.`);
+      if (line.topLeaves.length) tips.push(`Most common misses on this line: ${line.topLeaves.map((l) => l[0].replace(/-/g, " ") + " pin(s) " + l[1] + "x").join(", ")}.`);
+    }
+    tips.push("General rule: same target, move your feet. Missing high (toward the headpin) -> move feet toward the hooking side. Missing light -> move feet away from it. 1 board of feet = about 1.5-2 boards at the pins.");
+    el("coach").innerHTML = "<ul>" + tips.map((t) => `<li>${t}</li>`).join("") + "</ul>";
+  }
+  function arrowName(b) {
+    const arrows = [5, 10, 15, 20, 25, 30, 35];
+    const nearest = arrows.reduce((a, c) => Math.abs(c - b) < Math.abs(a - b) ? c : a);
+    const idx = arrows.indexOf(nearest) + 1;
+    const diff = b - nearest;
+    const side = diff === 0 ? "" : ` and ${Math.abs(diff)} board${Math.abs(diff) === 1 ? "" : "s"} ${diff > 0 ? "left" : "right"} of it`;
+    return `the ${idx}${["st", "nd", "rd"][idx - 1] || "th"} arrow from the ${el("hand").value === "L" ? "left" : "right"}${side}`;
+  }
+  function findLine() {
+    const p = params();
+    const btn = el("find"); btn.disabled = true; btn.textContent = "Searching...";
+    setTimeout(() => {
+      const line = S.findLine(p, { trials: 40 });
+      btn.disabled = false; btn.textContent = "Find my line";
+      if (!line) { el("coach").innerHTML = "No pocket line found from this stance with these settings. Try moving your stand board or changing speed/revs."; return; }
+      setParams({ targetBoard: line.targetBoard });
+      last = S.simulate(params());
+      animate(last);
+      el("sRate").textContent = Math.round(line.rate * 100) + "%";
+      coach(last, line);
+    }, 30);
+  }
+  function rate() {
+    const btn = el("rate"); btn.disabled = true; btn.textContent = "Rolling 100...";
+    setTimeout(() => {
+      const r = S.strikeRate(params(), 100);
+      btn.disabled = false; btn.textContent = "Strike % (100 shots)";
+      el("sRate").textContent = Math.round(r.rate * 100) + "%";
+      el("sRate").className = r.rate > 0.5 ? "good" : r.rate > 0.25 ? "warn" : "bad";
+      const leaves = r.topLeaves.map((l) => `${l[0].replace(/-/g, " ")} (${l[1]}x)`).join(", ");
+      el("result").innerHTML += `<div style="color:var(--muted);font-size:13px;margin-top:4px">100-shot strike rate ${Math.round(r.rate * 100)}%. Common leaves: ${leaves || "none"}.</div>`;
+    }, 30);
+  }
+
+  for (const k of ids) el(k).addEventListener("input", () => { syncOutputs(); drawLane(params(), null); });
+  el("hand").addEventListener("change", () => { const p = params(); setParams({ standBoard: 40 - p.standBoard, targetBoard: 40 - p.targetBoard }); drawLane(params(), null); });
+  el("preset").addEventListener("change", (e) => {
+    const pr = presets[e.target.value]; if (!pr) return;
+    const q = Object.assign({}, pr); if (el("hand").value === "L") { q.standBoard = 40 - q.standBoard; q.targetBoard = 40 - q.targetBoard; }
+    setParams(q); throwBall();
+  });
+  el("throw").addEventListener("click", throwBall);
+  el("find").addEventListener("click", findLine);
+  el("rate").addEventListener("click", rate);
+  el("reset").addEventListener("click", () => { setParams(Object.assign({}, S.DEFAULTS)); el("preset").value = ""; drawLane(params(), null); el("result").textContent = ""; });
+  // tap the lane to set the target board at the arrows
+  canvas.addEventListener("pointerdown", (ev) => {
+    const r = canvas.getBoundingClientRect();
+    const x = (ev.clientX - r.left) * canvas.width / r.width;
+    const g = geom();
+    const laneX = (x - g.cx) / g.sx;
+    const b = Math.round(S.xToBoard(laneX) * 4) / 4;
+    if (b >= 1 && b <= 39) { setParams({ targetBoard: b }); throwBall(); }
+  });
+
+  setParams(Object.assign({}, S.DEFAULTS));
+  throwBall();
+})();
+</script>
+</body>
+</html>
