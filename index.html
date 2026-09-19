@@ -12,9 +12,11 @@
   header h1 { margin:0; font-size:18px; }
   header span { color:var(--muted); font-size:13px; }
   main { display:grid; grid-template-columns: 1fr; gap:12px; padding:12px; max-width:1200px; margin:0 auto; }
-  @media (min-width: 900px) { main { grid-template-columns: 420px 1fr; } }
+  #coachPanel { order: 2; } #lanePanel { order: 3; }
+  @media (min-width: 900px) { main { grid-template-columns: 420px 1fr; } #coachPanel { order: 0; grid-column: 1 / -1; } #lanePanel { order: 0; } }
+  @media (max-width: 899px) { .row label { flex-basis: 110px; font-size:13px; } .btns button { flex: 1 1 45%; padding:14px; font-size:16px; } .stats { grid-template-columns: repeat(2, 1fr); } header span { display:none; } }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; }
-  canvas { width:100%; height:auto; display:block; border-radius:8px; background:#0a0c10; touch-action:none; }
+  canvas { display:block; margin:0 auto; height:min(78vh, 900px); width:auto; max-width:100%; border-radius:8px; background:#0a0c10; touch-action:none; }
   .row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14px; }
   .row label { flex:0 0 132px; color:var(--muted); }
   .row input[type=range] { flex:1; accent-color:var(--accent); }
@@ -79,10 +81,11 @@
     </div>
     <div id="result" style="margin-top:10px;font-size:15px"></div>
   </section>
-  <section class="panel">
-    <canvas id="lane" width="900" height="1100"></canvas>
+  <section class="panel" id="lanePanel">
+    <canvas id="lane" width="640" height="1100"></canvas>
+    <p style="color:var(--muted);font-size:12px;text-align:center;margin:8px 0 0">Tap the lane to set your target board and throw.</p>
   </section>
-  <section class="panel" style="grid-column:1 / -1">
+  <section class="panel" id="coachPanel">
     <h3 style="margin:0 0 8px">Coach</h3>
     <div id="coach">Throw a ball or press <b>Find my line</b>.</div>
     <details style="margin-top:10px"><summary>How the physics works</summary>
@@ -131,7 +134,7 @@
   }
 
   // ---- drawing -------------------------------------------------------------
-  const XS = 5; // width exaggeration
+  const XS = 3.5; // width exaggeration
   const PAD = 30;
   function geom() {
     const W = canvas.width, H = canvas.height;
@@ -174,7 +177,7 @@
     for (const b of [5, 10, 15, 20, 25, 30, 35]) ctx.fillText(String(b), g.toX(hand * S.boardToX(b)), g.H - 8);
     ctx.textAlign = "left";
     for (const ft of [15, 30, 45, 60]) { ctx.fillText(ft + " ft", g.toX(halfW + gut) + 4, g.toY(ft * S.FT) + 4); }
-    ctx.fillText("oil ends " + p.oilLengthFt + " ft", g.toX(-halfW - gut) - 2 - 90, g.toY(oilEnd) + 4);
+    ctx.textAlign = "right"; ctx.fillText("oil ends " + p.oilLengthFt + " ft", g.toX(-halfW - gut) - 4, g.toY(oilEnd) + 4); ctx.textAlign = "left";
     // pocket marker
     const pocketX = S.boardToX(20 - hand * 2.5);
     ctx.strokeStyle = "rgba(61,220,132,0.8)"; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(g.toX(pocketX), g.toY(S.LANE.length - 3)); ctx.lineTo(g.toX(pocketX), g.toY(S.LANE.length - 0.2)); ctx.stroke(); ctx.setLineDash([]);
