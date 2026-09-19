@@ -12,9 +12,17 @@
   header h1 { margin:0; font-size:18px; }
   header span { color:var(--muted); font-size:13px; }
   main { display:grid; grid-template-columns: 1fr; gap:12px; padding:12px; max-width:1200px; margin:0 auto; }
-  #coachPanel { order: 2; } #lanePanel { order: 3; }
-  @media (min-width: 900px) { main { grid-template-columns: 420px 1fr; } #coachPanel { order: 0; grid-column: 1 / -1; } #lanePanel { order: 0; } }
-  @media (max-width: 899px) { .row label { flex-basis: 110px; font-size:13px; } .btns button { flex: 1 1 45%; padding:14px; font-size:16px; } .stats { grid-template-columns: repeat(2, 1fr); } header span { display:none; } }
+  #shotPanel { order: 0; } #controlsPanel { order: 1; } #coachPanel { order: 2; } #lanePanel { order: 3; }
+  @media (min-width: 900px) { main { grid-template-columns: 440px 1fr; } #shotPanel { grid-column: 1; } #lanePanel { grid-column: 2; grid-row: 1 / span 3; } #coachPanel { grid-column: 1; } }
+  @media (max-width: 899px) { .row label { flex-basis: 110px; font-size:13px; } .btns button { flex: 1 1 45%; padding:14px; font-size:16px; } .stats { grid-template-columns: repeat(2, 1fr); } header span { display:none; } #controls[open] > summary { margin-bottom: 8px; } }
+  #controls > summary { cursor:pointer; font-size:14px; color:var(--muted); }
+  .shot { font-size:16px; line-height:1.5; }
+  .shot .big { font-size:22px; font-weight:700; color:var(--accent); }
+  #approach { height:auto; width:100%; max-width:100%; margin:10px 0; background:#0a0c10; }
+  #howto { margin:8px 0 0; padding-left:20px; font-size:15px; line-height:1.5; }
+  #howto li { margin:6px 0; }
+  .fb { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+  .fbt { font-size:14px; color:var(--muted); }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; }
   canvas { display:block; margin:0 auto; height:min(78vh, 900px); width:auto; max-width:100%; border-radius:8px; background:#0a0c10; touch-action:none; }
   .row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14px; }
@@ -46,7 +54,24 @@
   <span>real skid / hook / roll friction physics, 15 lb ball, USBC lane and pin geometry</span>
 </header>
 <main>
-  <section class="panel">
+  <section class="panel" id="shotPanel">
+    <h3 style="margin:0 0 6px">Your shot</h3>
+    <div id="shotSummary" class="shot"></div>
+    <canvas id="approach" width="700" height="360"></canvas>
+    <ol id="howto"></ol>
+    <div class="btns"><button class="primary" id="find2">Find my best line</button><button id="rate2">Strike % on this line</button></div>
+    <div class="fb">
+      <div class="fbt">What happened on your last real ball?</div>
+      <div class="btns" style="margin-top:6px">
+        <button data-fb="strike">Strike</button>
+        <button data-fb="high">Hit high / headpin</button>
+        <button data-fb="light">Light / missed right</button>
+        <button data-fb="ten">Left the 10 pin</button>
+      </div>
+    </div>
+  </section>
+  <section class="panel" id="controlsPanel">
+    <details id="controls" open><summary><b>My style</b> -- speed, revs, hand, oil</summary>
     <div class="row"><label>Hand</label>
       <select id="hand"><option value="R">Right</option><option value="L">Left</option></select>
       <label style="flex:0 0 auto">Preset</label>
@@ -80,6 +105,7 @@
       <div class="stat"><b id="sRate">--</b><small>strike % with human error</small></div>
     </div>
     <div id="result" style="margin-top:10px;font-size:15px"></div>
+    </details>
   </section>
   <section class="panel" id="lanePanel">
     <canvas id="lane" width="640" height="1100"></canvas>
@@ -250,6 +276,7 @@
     el("sRate").textContent = "--";
     animate(last);
     coach(last, null);
+    renderShot(last);
   }
   function coach(res, line) {
     const s = res.stats, p = res.params;
@@ -286,7 +313,7 @@
     const side = diff === 0 ? "" : ` and ${Math.abs(diff)} board${Math.abs(diff) === 1 ? "" : "s"} ${diff > 0 ? "left" : "right"} of it`;
     return `the ${idx}${["st", "nd", "rd"][idx - 1] || "th"} arrow from the ${el("hand").value === "L" ? "left" : "right"}${side}`;
   }
-  function findLine() {
+  function findLine(done) {
     const p = params();
     const btn = el("find"); btn.disabled = true; btn.textContent = "Searching...";
     setTimeout(() => {
@@ -298,6 +325,8 @@
       animate(last);
       el("sRate").textContent = Math.round(line.rate * 100) + "%";
       coach(last, line);
+      renderShot(last, line);
+      if (typeof done === "function") done();
     }, 30);
   }
   function rate() {
@@ -307,10 +336,119 @@
       btn.disabled = false; btn.textContent = "Strike % (100 shots)";
       el("sRate").textContent = Math.round(r.rate * 100) + "%";
       el("sRate").className = r.rate > 0.5 ? "good" : r.rate > 0.25 ? "warn" : "bad";
+      el("rate2").textContent = `Strike % on this line: ${Math.round(r.rate * 100)}%`;
       const leaves = r.topLeaves.map((l) => `${l[0].replace(/-/g, " ")} (${l[1]}x)`).join(", ");
       el("result").innerHTML += `<div style="color:var(--muted);font-size:13px;margin-top:4px">100-shot strike rate ${Math.round(r.rate * 100)}%. Common leaves: ${leaves || "none"}.</div>`;
     }, 30);
   }
+
+  // ---- "Your shot" card: where to stand, where to aim, how to throw ---------
+  const FEET_OFFSET = 7; // slide foot is ~7 boards toward the body side of the ball at the foul line
+  function ordinal(n) { return n + (["st", "nd", "rd"][n - 1] || "th"); }
+  function describeArrow(b, hand) {
+    const arrows = [5, 10, 15, 20, 25, 30, 35];
+    const nearest = arrows.reduce((a, c) => Math.abs(c - b) < Math.abs(a - b) ? c : a);
+    const idx = hand > 0 ? arrows.indexOf(nearest) + 1 : 7 - arrows.indexOf(nearest);
+    const diff = Math.round((b - nearest) * 4) / 4;
+    const toward = diff * hand > 0 ? "left" : "right";
+    const off = diff === 0 ? "right over" : `${Math.abs(diff)} board${Math.abs(diff) === 1 ? "" : "s"} ${toward} of`;
+    return `${off} the ${ordinal(idx)} arrow${idx === 4 ? " (center)" : ""}`;
+  }
+  function renderShot(res, line) {
+    const p = res.params, s = res.stats;
+    const hand = p.hand === "L" ? -1 : 1;
+    const feet = Math.round((p.standBoard + hand * FEET_OFFSET) * 2) / 2;
+    const tgt = Math.round(p.targetBoard * 4) / 4;
+    const verdict = line ? `<span class="${line.rate > 0.4 ? "good" : "warn"}">Best line from this stance: strikes ~${Math.round(line.rate * 100)}% of the time with normal human error.</span>` : res.strike ? '<span class="good">This line strikes in the sim.</span>' : s.gutter ? '<span class="bad">This line is a gutter ball -- press Find my line.</span>' : `<span class="warn">Sim leaves the ${res.standing.join("-")} -- press Find my line to fix it.</span>`;
+    el("shotSummary").innerHTML =
+      `<div>Stand with your <b>${hand > 0 ? "left" : "right"} (slide) foot on board <span class="big">${feet}</span></b> so the ball sits over board <b>${p.standBoard}</b> at the foul line.</div>` +
+      `<div>Roll the ball <b>${describeArrow(tgt, hand)}</b> (board <span class="big">${tgt}</span>).</div>` +
+      `<div style="color:var(--muted);font-size:13px">Boards count from the ${hand > 0 ? "right" : "left"} gutter. Arrows are counted from the ${hand > 0 ? "right" : "left"}. ${verdict}</div>`;
+    drawApproach(p, res);
+    el("howto").innerHTML = howToThrow(p).map((t) => `<li>${t}</li>`).join("");
+    document.querySelector('[data-fb="light"]').textContent = `Light / missed ${hand > 0 ? "right" : "left"}`;
+  }
+  function howToThrow(p) {
+    const tips = [];
+    const hand = p.hand === "L" ? -1 : 1;
+    const speed = p.speedMph < 14 ? "slow and smooth -- a relaxed 4-step approach, let the ball swing like a pendulum" : p.speedMph < 18 ? "medium -- normal walking pace, free arm swing, no muscling" : "fast -- brisk approach with a higher backswing; keep the swing loose, speed comes from the legs";
+    tips.push(`<b>Speed ${p.speedMph} mph:</b> ${speed}.`);
+    if (p.revRpm < 150) tips.push(`<b>Straight release:</b> thumb at 12 o'clock, fingers directly behind the ball. Hand stays behind the ball through release, palm toward the pins. No wrist turn.`);
+    else if (p.axisRotationDeg <= 30) tips.push(`<b>Low-rotation release:</b> start with the thumb at about 1 o'clock (${hand > 0 ? "right" : "left"} of top). At the bottom of the swing let the thumb exit first, then lift with the ring and middle fingers straight up the back of the ball. Finish in a handshake position.`);
+    else if (p.axisRotationDeg <= 55) tips.push(`<b>Handshake release (${p.axisRotationDeg} deg rotation):</b> thumb starts around 2 o'clock. Thumb out first, then the fingers rotate from 6 to about 4:30 o'clock as they lift -- like turning a doorknob a quarter turn. Finish with the hand in a handshake, thumb pointing to the target.`);
+    else tips.push(`<b>Big-rotation release (${p.axisRotationDeg} deg):</b> hand more under and to the side of the ball (thumb near 3 o'clock). Rotate hard from 6 to 3 o'clock as the fingers lift out. Needs speed to avoid hooking early.`);
+    if (p.revRpm >= 150) tips.push(p.revRpm < 300 ? `<b>Revs ${p.revRpm} rpm:</b> keep a firm, flat wrist and let the fingers do the lift at the bottom of the swing.` : `<b>Revs ${p.revRpm} rpm:</b> cup the wrist in the stance, uncup it as the ball passes your leg, and lift hard with the fingers at release.`);
+    tips.push(`<b>Release:</b> ball comes off the hand just past your slide foot, an inch above the lane -- no loft. Keep your eyes locked on the target arrow, not the pins.`);
+    tips.push(`<b>Follow through</b> straight toward your target arrow and hold the finish until the ball passes the arrows.`);
+    return tips;
+  }
+  function drawApproach(p, res) {
+    const c = el("approach"), a = c.getContext("2d");
+    const W = c.width, H = c.height;
+    const hand = p.hand === "L" ? -1 : 1;
+    a.clearRect(0, 0, W, H);
+    const laneW = S.LANE.width, gut = S.LANE.gutterWidth;
+    const xs = (W - 40) / (laneW + 2 * gut);
+    const toX = (x) => W / 2 + x * xs;
+    // vertical: approach (bottom 40%) + first 18 ft of lane (top 60%)
+    const foulY = H * 0.62;
+    const ys = (foulY - 30) / (18 * S.FT);
+    const toY = (y) => foulY - y * ys;
+    a.fillStyle = "#1c1f27"; a.fillRect(toX(-laneW / 2 - gut), 0, (laneW + 2 * gut) * xs, foulY);
+    a.fillStyle = "#c9a26b"; a.fillRect(toX(-laneW / 2), 0, laneW * xs, foulY);
+    a.fillStyle = "#8d7250"; a.fillRect(toX(-laneW / 2 - gut), foulY, (laneW + 2 * gut) * xs, H - foulY);
+    a.strokeStyle = "rgba(0,0,0,0.15)"; a.lineWidth = 1;
+    for (let b = 1; b < 39; b++) { const x = toX(-laneW / 2 + b * S.LANE.boardWidth); a.beginPath(); a.moveTo(x, 0); a.lineTo(x, H); a.stroke(); }
+    a.fillStyle = "#3a2a14";
+    for (const b of [5, 10, 15, 20, 25, 30, 35]) {
+      const x = toX(S.boardToX(b)), y = toY(S.LANE.arrowsY);
+      a.beginPath(); a.moveTo(x, y - 16); a.lineTo(x - 7, y + 4); a.lineTo(x + 7, y + 4); a.closePath(); a.fill();
+      a.beginPath(); a.arc(toX(S.boardToX(b)), toY(7 * S.FT), 3, 0, 7); a.fill();
+      a.beginPath(); a.arc(toX(S.boardToX(b)), foulY + 22, 3, 0, 7); a.fill(); // approach dots
+    }
+    a.strokeStyle = "#111"; a.lineWidth = 3; a.beginPath(); a.moveTo(toX(-laneW / 2 - gut), foulY); a.lineTo(toX(laneW / 2 + gut), foulY); a.stroke();
+    a.fillStyle = "#e8eaf0"; a.font = "bold 13px system-ui"; a.textAlign = "center";
+    for (const b of [5, 10, 15, 20, 25, 30, 35]) a.fillText(String(b), toX(S.boardToX(b)), H - 6);
+    a.textAlign = "left"; a.fillStyle = "#9aa3b5"; a.font = "12px system-ui"; a.fillText("foul line", 4, foulY - 4); a.fillText("arrows 15 ft", 4, toY(S.LANE.arrowsY) - 2);
+    // planned path over the first 18 ft
+    a.strokeStyle = "#ffb020"; a.lineWidth = 4; a.setLineDash([]); a.beginPath();
+    let started = false;
+    for (const q of res.path) { if (q.y > 18 * S.FT) break; const x = toX(q.x), y = toY(q.y); if (!started) { a.moveTo(x, y); started = true; } else a.lineTo(x, y); }
+    a.stroke();
+    // ball at lay-down
+    const bx = toX(S.boardToX(p.standBoard));
+    a.beginPath(); a.arc(bx, foulY + 14, S.BALL.radius * xs, 0, 7); a.fillStyle = "#222"; a.fill(); a.strokeStyle = "#fff"; a.lineWidth = 2; a.stroke();
+    // slide foot
+    const feet = p.standBoard + hand * FEET_OFFSET;
+    const fx = toX(S.boardToX(feet));
+    a.fillStyle = "#3ddc84";
+    a.beginPath(); a.ellipse(fx, foulY + 40, 9, 24, 0, 0, 7); a.fill();
+    a.beginPath(); a.ellipse(fx - hand * 30, foulY + 70, 9, 24, 0, 0, 7); a.fillStyle = "rgba(61,220,132,0.45)"; a.fill();
+    a.fillStyle = "#3ddc84"; a.font = "bold 13px system-ui"; a.textAlign = "center";
+    a.fillText("slide foot: board " + (Math.round(feet * 2) / 2), fx, foulY + 100);
+    a.fillStyle = "#fff"; a.fillText("ball: board " + p.standBoard, bx, foulY + 14 - S.BALL.radius * xs - 6);
+    // target marker
+    const tx = toX(S.boardToX(p.targetBoard)), ty = toY(S.LANE.arrowsY);
+    a.strokeStyle = "#ffb020"; a.lineWidth = 3; a.beginPath(); a.arc(tx, ty - 6, 12, 0, 7); a.stroke();
+    a.beginPath(); a.moveTo(tx - 18, ty - 6); a.lineTo(tx + 18, ty - 6); a.moveTo(tx, ty - 24); a.lineTo(tx, ty + 12); a.stroke();
+    a.fillStyle = "#ffb020"; a.fillText("aim here: board " + (Math.round(p.targetBoard * 4) / 4), tx, ty - 32);
+  }
+  // After a real ball: standard "same target, move your feet" adjustments, then re-simulate.
+  const feedback = {
+    strike: (p, hand) => ({ msg: "Nice. Keep the exact same stance and target. Repeat your tempo." }),
+    high: (p, hand) => ({ standBoard: p.standBoard + hand * 1, msg: "Ball hooked too much. Feet moved 1 board toward your hooking side and the target re-checked from the new stance. Use the new stand/aim boards above." }),
+    light: (p, hand) => ({ standBoard: p.standBoard - hand * 1, msg: "Ball did not hook enough. Feet moved 1 board away from your hooking side and the target re-checked from the new stance. If it happens again, also take 1 mph off the speed." }),
+    ten: (p, hand) => ({ standBoard: p.standBoard - hand * 1, targetBoard: p.targetBoard - hand * 0.5, msg: "Ringing 10 pin = pocket hit with too little entry angle. Feet and target moved half a board outside to create more angle, or take 1 mph off the speed." }),
+  };
+  document.querySelectorAll("[data-fb]").forEach((btn) => btn.addEventListener("click", () => {
+    const p = params(); const hand = p.hand === "L" ? -1 : 1;
+    const r = feedback[btn.dataset.fb](p, hand);
+    const upd = {}; if (r.standBoard != null) upd.standBoard = Math.min(39, Math.max(1, r.standBoard)); if (r.targetBoard != null) upd.targetBoard = Math.min(39, Math.max(1, r.targetBoard));
+    setParams(upd);
+    const note = () => { el("coach").innerHTML = `<p><b>Adjustment:</b> ${r.msg}</p>` + el("coach").innerHTML; };
+    if (btn.dataset.fb === "strike") { throwBall(); note(); } else findLine(note);
+    el("shotPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
 
   for (const k of ids) el(k).addEventListener("input", () => { syncOutputs(); drawLane(params(), null); });
   el("hand").addEventListener("change", () => { const p = params(); setParams({ standBoard: 40 - p.standBoard, targetBoard: 40 - p.targetBoard }); drawLane(params(), null); });
@@ -321,7 +459,9 @@
   });
   el("throw").addEventListener("click", throwBall);
   el("find").addEventListener("click", findLine);
+  el("find2").addEventListener("click", findLine);
   el("rate").addEventListener("click", rate);
+  el("rate2").addEventListener("click", rate);
   el("reset").addEventListener("click", () => { setParams(Object.assign({}, S.DEFAULTS)); el("preset").value = ""; drawLane(params(), null); el("result").textContent = ""; });
   // tap the lane to set the target board at the arrows
   canvas.addEventListener("pointerdown", (ev) => {
@@ -334,6 +474,7 @@
   });
 
   setParams(Object.assign({}, S.DEFAULTS));
+  if (window.matchMedia("(max-width: 899px)").matches) el("controls").removeAttribute("open");
   throwBall();
 })();
 </script>
