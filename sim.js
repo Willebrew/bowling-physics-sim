@@ -49,7 +49,9 @@
     oilFriction: 0.04,
     dryFriction: 0.22,
     hand: "R",
+    ballLb: 15,            // ball weight; only matters at the pins (lane friction is mass-independent)
   };
+  function ballMass(p) { return (p.ballLb || 15) * 0.4536; }
 
   // Coefficient of friction along the lane: oil in front, dry backend, ~1 m transition.
   function laneFriction(y, p) {
@@ -136,11 +138,11 @@
   const DOWN_PIN_RADIUS = 0.08; // a toppled pin sweeps roughly its half-length, not just its belly
   function pinRadius(q) { return q.down ? DOWN_PIN_RADIUS : PIN.radius; }
 
-  function stepPins(b, pins, dt) {
+  function stepPins(b, pins, p, dt) {
     const kick = LANE.width / 2 + LANE.gutterWidth;
     for (const q of pins) {
       if (q.gone || b.inGutter) continue;
-      const hit = collide(b, q, BALL.radius, PIN.radius, BALL.mass, PIN.mass, 0.6);
+      const hit = collide(b, q, BALL.radius, PIN.radius, ballMass(p), PIN.mass, 0.6);
       if (hit > TOPPLE_SPEED) q.down = true;
     }
     for (let i = 0; i < pins.length; i++) {
@@ -190,7 +192,7 @@
         stats.speedAtPinsMph = Math.hypot(b.vx, b.vy) / 0.44704;
         stats.gutter = b.inGutter;
       }
-      if (b.y > LANE.length - 1) stepPins(b, pins, dt);
+      if (b.y > LANE.length - 1) stepPins(b, pins, p, dt);
       if (reached) {
         const moving = pins.some((q) => !q.gone && q.down && Math.hypot(q.vx, q.vy) > 0.05) || Math.hypot(b.vx, b.vy) > 0.05 && b.y < LANE.pitY;
         if (!moving) settle += dt; else settle = 0;
@@ -206,6 +208,7 @@
   // Human repeatability: run many shots with small random errors and report the strike rate.
   function strikeRate(params, n, noise) {
     const nz = Object.assign({ boardSd: 0.6, speedSd: 0.25, revSd: 15, targetSd: 0.5 }, noise || {});
+    params = Object.assign({}, DEFAULTS, params || {});
     let strikes = 0; const leaves = {};
     for (let i = 0; i < n; i++) {
       const q = Object.assign({}, params, {

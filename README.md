@@ -24,7 +24,7 @@ Open `index.html` in any browser (works on a phone), or serve the folder with `p
 
 | Quantity | Value |
 | --- | --- |
-| Ball | 8.5 in diameter, 6.8 kg, solid-sphere inertia 2/5 m r^2 |
+| Ball | 8.5 in diameter, 10-16 lb (`ballLb`, default 15), solid-sphere inertia 2/5 m r^2. Weight only affects pin collisions: Coulomb lane friction is mass-independent |
 | Pin | 4.766 in belly, 1.58 kg |
 | Oil friction | 0.04 |
 | Dry backend friction | 0.22 |

@@ -49,3 +49,10 @@ run("ball loses speed down the lane", () => {
   const r = S.simulate({ speedMph: 17 }, { noPath: true });
   assert.ok(r.stats.speedAtPinsMph < 16 && r.stats.speedAtPinsMph > 11);
 });
+
+run("heavier ball strikes at least as often as a light one on the same line", () => {
+  const light = S.strikeRate({ ballLb: 10 }, 150);
+  const heavy = S.strikeRate({ ballLb: 16 }, 150);
+  assert.ok(heavy.rate >= light.rate, `heavy ${heavy.rate} vs light ${light.rate}`);
+  assert.ok(S.simulate({ ballLb: 15 }).strike, "default weight still strikes");
+});

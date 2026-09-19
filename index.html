@@ -90,6 +90,7 @@
     <div class="row"><label>Stand board (foul line)</label><input type="range" id="standBoard" min="1" max="39" step="0.5"><output></output></div>
     <div class="row"><label>Target board (arrows)</label><input type="range" id="targetBoard" min="1" max="39" step="0.25"><output></output></div>
     <div class="row"><label>Oil pattern length</label><input type="range" id="oilLengthFt" min="30" max="48" step="1"><output></output></div>
+    <div class="row"><label>Ball weight</label><input type="range" id="ballLb" min="10" max="16" step="1"><output></output></div>
     <div class="btns">
       <button class="primary" id="throw">Throw</button>
       <button id="find">Find my line</button>
@@ -132,8 +133,8 @@
 <script>
 (function () {
   const S = BowlingSim;
-  const ids = ["speedMph", "revRpm", "axisRotationDeg", "axisTiltDeg", "standBoard", "targetBoard", "oilLengthFt"];
-  const units = { speedMph: " mph", revRpm: " rpm", axisRotationDeg: " deg", axisTiltDeg: " deg", standBoard: "", targetBoard: "", oilLengthFt: " ft" };
+  const ids = ["speedMph", "revRpm", "axisRotationDeg", "axisTiltDeg", "standBoard", "targetBoard", "oilLengthFt", "ballLb"];
+  const units = { speedMph: " mph", revRpm: " rpm", axisRotationDeg: " deg", axisTiltDeg: " deg", standBoard: "", targetBoard: "", oilLengthFt: " ft", ballLb: " lb" };
   const presets = {
     straight: { speedMph: 15, revRpm: 60, axisRotationDeg: 0, axisTiltDeg: 10, standBoard: 17.5, targetBoard: 17.5 },
     stroker: { speedMph: 16, revRpm: 280, axisRotationDeg: 30, axisTiltDeg: 15, standBoard: 18, targetBoard: 12 },
@@ -372,6 +373,7 @@
     const tips = [];
     const hand = p.hand === "L" ? -1 : 1;
     const speed = p.speedMph < 14 ? "slow and smooth -- a relaxed 4-step approach, let the ball swing like a pendulum" : p.speedMph < 18 ? "medium -- normal walking pace, free arm swing, no muscling" : "fast -- brisk approach with a higher backswing; keep the swing loose, speed comes from the legs";
+    tips.push(ballTip(p));
     tips.push(`<b>Speed ${p.speedMph} mph:</b> ${speed}.`);
     if (p.revRpm < 150) tips.push(`<b>Straight release:</b> thumb at 12 o'clock, fingers directly behind the ball. Hand stays behind the ball through release, palm toward the pins. No wrist turn.`);
     else if (p.axisRotationDeg <= 30) tips.push(`<b>Low-rotation release:</b> start with the thumb at about 1 o'clock (${hand > 0 ? "right" : "left"} of top). At the bottom of the swing let the thumb exit first, then lift with the ring and middle fingers straight up the back of the ball. Finish in a handshake position.`);
@@ -380,7 +382,15 @@
     if (p.revRpm >= 150) tips.push(p.revRpm < 300 ? `<b>Revs ${p.revRpm} rpm:</b> keep a firm, flat wrist and let the fingers do the lift at the bottom of the swing.` : `<b>Revs ${p.revRpm} rpm:</b> cup the wrist in the stance, uncup it as the ball passes your leg, and lift hard with the fingers at release.`);
     tips.push(`<b>Release:</b> ball comes off the hand just past your slide foot, an inch above the lane -- no loft. Keep your eyes locked on the target arrow, not the pins.`);
     tips.push(`<b>Follow through</b> straight toward your target arrow and hold the finish until the ball passes the arrows.`);
+    tips.push(`<b>Finish in balance:</b> slide foot flat and pointed at the target, knee bent, trail leg swept behind you, shoulders square. If you have to hop or step sideways after the release, the shot was off balance -- slow your approach down.`);
     return tips;
+  }
+  function ballTip(p) {
+    const lb = p.ballLb;
+    const feel = lb <= 11 ? "Light ball: it deflects a lot off the headpin, so it needs a steeper entry angle and more revs to carry. Pick it only if a heavier one strains your wrist."
+      : lb <= 13 ? "Medium weight: good carry if you can keep your speed up. Move up 1 lb if you can swing it without muscling."
+      : "Heavy ball: drives through the pins with the least deflection. Only worth it if you can swing it freely with a relaxed arm.";
+    return `<b>Ball ${lb} lb:</b> ${feel} Fit check: thumb slides out with a little resistance, fingers to the second knuckle, and the span lets a pencil slide under your palm. A house ball that hangs on the thumb ruins your release -- swap it.`;
   }
   function drawApproach(p, res) {
     const c = el("approach"), a = c.getContext("2d");
